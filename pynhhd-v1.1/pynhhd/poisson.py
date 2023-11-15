@@ -23,6 +23,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
 import numpy as np
+import numpy.ma as ma
 from scipy import signal, spatial, integrate
 
 import shutil, tempfile
@@ -364,6 +365,8 @@ class PoissonSolver(object):
             if self.stype == 'F':
                 p = signal.fftconvolve(f, self.G, mode='same')
                 np.multiply(p, np.prod(self.gdx), p)
+                if self.dim == 2 and ma.isMaskedArray(f):
+                    p = ma.masked_array(p, mask=f.mask)
 
             elif self.stype == 'S':
                 raise SyntaxError('Spatial solver not suggested for structured grids')

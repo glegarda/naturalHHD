@@ -6,6 +6,9 @@
 C++ and python libraries to compute the natural HHD. For details, please see the aforementioned paper. The code is released under BSD licence. Please make appropriate citation if you use the technique/code.
 
 
+##### modifications introduced by Guillermo Legarda Herranz
+***Add functionality to process regular masked 2D grids to version 1.1***
+
 ##### version 1.1 (Dec 26, 2017)
 ***Python tool for computation on regular/rectangular grids and simplicial meshes***
 

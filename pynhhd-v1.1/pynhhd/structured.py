@@ -22,6 +22,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
 import numpy as np
+import numpy.ma as ma
 import logging
 LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +59,29 @@ class StructuredGrid(object):
 
     # --------------------------------------------------------------------------
     # --------------------------------------------------------------------------
+    def mgradient(self, sfield):
+        if not ma.isMaskedArray(sfield):
+            raise ValueError("Scalar field must be an instance of MaskedArray")
+
+        if self.dim != 2:
+            raise ValueError("mgradient works only for 2D")
+
+        def m1dd(arr1d, d):
+            grad = ma.zeros_like(arr1d, dtype=np.float)
+            unmasked_slices = ma.clump_unmasked(arr1d)
+            for s in unmasked_slices:
+                grad[s] = np.gradient(arr1d[s], d)
+            return grad
+
+        def m2dd(arr2d, d, axis):
+            return ma.apply_along_axis(m1dd, axis, arr2d, d)
+
+        ddy = m2dd(sfield, self.dx[0], axis = 0)
+        ddx = m2dd(sfield, self.dx[1], axis = 1)
+        return (ddy, ddx)
+
+    # --------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
     def divcurl(self, vfield):
 
         if (vfield.shape[-1] != self.dim) or (vfield.shape[0:self.dim] != self.dims):
@@ -69,11 +93,20 @@ class StructuredGrid(object):
         if self.dim == 2:
 
             # self.dx = (dy,dx)
-            dudy, dudx = np.gradient(vfield[:,:,0], self.dx[0], self.dx[1])
-            dvdy, dvdx = np.gradient(vfield[:,:,1], self.dx[0], self.dx[1])
+            if ma.isMaskedArray(vfield):
+                dudy, dudx = self.mgradient(vfield[:,:,0])
+                dvdy, dvdx = self.mgradient(vfield[:,:,1])
+            else:
+                dudy, dudx = np.gradient(vfield[:,:,0], self.dx[0], self.dx[1])
+                dvdy, dvdx = np.gradient(vfield[:,:,1], self.dx[0], self.dx[1])
 
             np.add(dudx, dvdy, dudx)
             np.subtract(dvdx, dudy, dvdx)
+
+            # Set masked data to 0 to prevent contribution to convolution
+            if ma.isMaskedArray(vfield):
+                dudx.data[dudx.mask == True] = 0.
+                dvdx.data[dvdx.mask == True] = 0.
 
             mtimer.end()
             LOGGER.debug('Computing divcurl done! took {}'.format(mtimer))
@@ -134,10 +167,14 @@ class StructuredGrid(object):
         LOGGER.debug('Computing rotated gradient')
         mtimer = Timer()
 
-        ddy, ddx = np.gradient(sfield, self.dx[0], self.dx[1])
-        ddy *= -1.0
-
-        grad = np.stack((ddy, ddx), axis=-1)
+        if ma.isMaskedArray(sfield):
+            ddy, ddx = self.mgradient(sfield)
+            ddy *= -1.0
+            grad = ma.stack((ddy, ddx), axis=-1)
+        else:
+            ddy, ddx = np.gradient(sfield, self.dx[0], self.dx[1])
+            ddy *= -1.0
+            grad = np.stack((ddy, ddx), axis=-1)
 
         mtimer.end()
         LOGGER.debug('Computing rotated gradient done! took {}'.format(mtimer))
@@ -155,8 +192,12 @@ class StructuredGrid(object):
         if self.dim == 2:
 
             # self.dx = (dy,dx)
-            ddy, ddx = np.gradient(sfield, self.dx[0], self.dx[1])
-            grad = np.stack((ddx, ddy), axis = -1)
+            if ma.isMaskedArray(sfield):
+                ddy, ddx = self.mgradient(sfield)
+                grad = ma.stack((ddx, ddy), axis = -1)
+            else:
+                ddy, ddx = np.gradient(sfield, self.dx[0], self.dx[1])
+                grad = np.stack((ddx, ddy), axis = -1)
 
         elif self.dim == 3:
 
